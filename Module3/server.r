@@ -7,68 +7,82 @@ library('ggplot2')
 # load data
 mort <- read.csv('cleaned-cdc-mortality-1999-2010.csv')
 
-# let's just get the 'crude rate' of deaths for one state
-# in one year
 shinyServer(function(input, output){
   
-  outputPlot <- function(){
+  q1Plot <- function(){
     # subset
-    in_cause <- input$cause
-    slcted <- mort[mort$Year == 2010 & mort$ICD.Chapter==in_cause, 
-                   c('State','Crude.Rate', 'Population')
+    cause <- input$cause
+    filtered <- mort[mort$Year == 2010 & mort$ICD.Chapter==cause, 
+                   c('State','Crude.Rate')
                    ]
-    slcted <- slcted[with(slcted, order(-Crude.Rate)),]
-    slcted$State.Rank <- rank(-slcted$Crude.Rate, ties.method="random")
+    filtered <- filtered[with(filtered, order(-Crude.Rate)),]
     
-    gvisBubbleChart(slcted, 
-                    idvar='State', 
-                    xvar='Crude.Rate', 
-                    yvar='State.Rank',
-                    sizevar='Population',
-                    options= list(chartArea='{left:0,top:0,width:600,height:900}', 
-                                  colorAxis.legend.position='none',
-                                  fontSize=9,
-                                  vAxis='{direction:-1, maxValue:52, 
-                                  minValue:0, gridlines:{count:0}}',
-                                  hAxis=paste('{minValue:0,maxValue:',
-                                              slcted$Crude.Rate[1]*1.1,
-                                              ',gridlines:{count:0}}',
-                                              sep=''),
-                                  sizeAxis='{maxValue:40000000, minValue:500000,
-                                  maxSize:4, minSize:2}'
-                    )
-    )
+    bar=gvisBarChart(filtered,
+                 "State","Crude.Rate",
+                 options=list(width = 400,height=800,fontSize=12,legend="none"))
+
+    geochart=gvisGeoChart(filtered,
+                          locationvar="State", colorvar="Crude.Rate",
+                          options=list(region="US", displayMode="regions", height = 400,
+                                       resolution="provinces",
+                                       colorAxis="{colors:['#4daf4a','#fc8d62','red']}"
+                          ))
+    
+    gt <- gvisMerge(geochart,bar,horizontal=TRUE)
+    return(gt)
   }
   
-  motionPlot <- function(){
-    # subset
-    in_cause <- input$cause
-    motion <- mort[mort$ICD.Chapter==in_cause, 
+  byYearPlot <- function(){
+    # gather input
+    cause <- input$cause
+    filtered <- mort[mort$ICD.Chapter==cause, 
                    c('State','Crude.Rate', 'Year','Population', 'Deaths')
                    ]
     
-    # weighted Average
-    motion$Average <- daply(motion, 
-                            .(Year), 
-                            function(x) weighted.mean(x$Crude.Rate, x$Population))
-    motion$Best <- daply(motion, .(Year),function(x) min(x$Crude.Rate))
-    motion$Deviation.From.Average <- motion$Crude.Rate - motion$Average
-    motion$Deviation.From.Best <- motion$Best - motion$Crude.Rate
+    # get a weighted average for each year
+    filtered$Average <- daply(filtered,.(Year),function(x) weighted.mean(x$Crude.Rate, x$Population))
+
+    filtered$Delta <- filtered$Crude.Rate - filtered$Average
     
-    gvisMotionChart(motion, 
+    myStateSettings <-'
+{"showTrails":false,
+    "xAxisOption":"_ALPHABETICAL",
+    "yZoomedIn":false,
+    "iconKeySettings":[{"key":{"dim0":"New York"}}],
+    "xLambda":1,
+    "playDuration":15000,
+    "time":"1999",
+    "orderedByY":false,
+    "yZoomedDataMax":80,
+    "sizeOption":"_UNISIZE",
+    "xZoomedDataMax":51,
+    "orderedByX":true,
+    "colorOption":"4",
+    "xZoomedDataMin":0,
+    "yAxisOption":"6",
+    "dimensions":{"iconDimensions":["dim0"]},
+    "yZoomedDataMin":-100,
+    "xZoomedIn":false,
+    "yLambda":1,
+    "nonSelectedAlpha":0.4,
+    "iconType":"VBAR",
+    "duration":{"timeUnit":"Y","multiplier":1},
+    "uniColorForNonSelected":false}'
+    
+    
+    gvisMotionChart(filtered, 
                     idvar='State', 
                     timevar='Year',
                     xvar='Deaths', 
-                    yvar='Deviation.From.Average',
+                    yvar='Delta',
                     sizevar='Population',
-                    options= list(chartArea='{left:0,top:0,width:600,height:900}', 
-                                  colorAxis.legend.position='none',
-                                  state='{"showTrails":true};')
+                    options= list(chartArea='{left:0,top:0,width:600,height:800}', 
+                                  #colorAxis.legend.position='none',
+                                  state=myStateSettings)
     )
     
   }
   
-  # push to output for display
-  output$values <- renderGvis(outputPlot())
-  output$motion <- renderGvis(motionPlot())
+  output$rank2010 <- renderGvis(q1Plot())
+  output$byYear <- renderGvis(byYearPlot())
 })

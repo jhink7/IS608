@@ -16,7 +16,7 @@ cause <- as.character(unique(mort$ICD.Chapter))
 
 shinyUI(pageWithSidebar(headerPanel('State Mortality by Cause'),sidebarPanel(selectInput("cause", "Cause: ", cause, selected='Neoplasms')),
   mainPanel(
-    tabsetPanel(tabPanel("2010", htmlOutput('values')), tabPanel("By Year", htmlOutput('motion'))
+    tabsetPanel(tabPanel("2010", htmlOutput('rank2010')), tabPanel("By Year", htmlOutput('byYear'))
     )
   )
 ))
