@@ -1,0 +1,312 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>HW6 Justin Hink</title>
+    <style>
+
+        #controls {
+            width: 250px;
+            height: 580px;
+            float:left;
+        }
+
+        #map {
+            width: 960px;
+            height: 580px;
+            float:left;
+        }
+
+        .stroke {
+            fill: none;
+            stroke: #888;
+            stroke-width: 2px;
+        }
+
+        .fill {
+            fill: #fff;
+        }
+
+        .land {
+            fill: #222;
+        }
+
+        .boundary {
+            fill: none;
+            stroke: #fff;
+            stroke-width: .2px;
+        }
+
+        .country {
+            fill: red;
+            stroke: black;
+        }
+
+        #play, #clock {
+                    font-family: Arial;
+                }
+
+        #clock {
+                    font-weight: bold;
+                    font-size:20px;
+                }
+
+        div.tooltip {   
+          position: absolute;           
+          text-align: center;           
+          width: 150px;                  
+          height: 25px;                 
+          padding: 2px;             
+          font-size: 10px;     
+          background-color: lightblue;
+          border: 1px;      
+          border-radius: 8px;           
+          pointer-events: none;         
+        } 
+    </style>
+</head>
+
+<body>
+
+    <div id="controls">
+        <button id="play">Play Cycle</button>
+        <span id="clock"></span>
+        <p>
+            This visual is a simple glance at a source for potential bias in both the prices set forth by the DFS (Daily Fantasy Sports) companies (DraftKings and FanDuel) as well as potentially the projection
+            algorithm that DangleFactory uses.  More intense shades of red indicate that you're paying more $ per point for a player from that country on average.  Lighter shades represent 
+            better values.
+
+        </p>
+
+        <p>Click the "Play Cycle" button to have the page transition automatically between data from the two game providers.</p>
+
+        <p>
+            Note: Both the most intense and least intense colors here are from those countries in which there are the fewest players.  So, that immediately represents a sample size issue for these
+            countries.  Note that the countries that have the most players (Canada, USA, Russia) seem pretty consistent value wise.  My weak conclusion drawn from the data shown here is that we probably
+            don't have a significant bias issue based on birth country of NHL players in DFS.
+        </p>
+    </div>
+    <div id="map"></div>
+
+    <script src="http://d3js.org/d3.v3.min.js"></script>
+    <script src="http://d3js.org/d3.geo.projection.v0.min.js"></script>
+    <script src="http://d3js.org/queue.v1.min.js"></script>
+    <script src="http://d3js.org/topojson.v1.min.js"></script>
+    <script>
+        // global variables
+        var width, height, projection, path, graticule, div, svg, attributeArray = [], currentAttribute = 0, isPlaying = false;
+
+        function init() {
+
+            initializeMap();
+            animateMap();
+
+        }
+
+        function initializeMap() {
+
+            width = 1400, height = 900;  // map width and height, matches
+
+            projection = d3.geo.eckert5()   // define our projection with parameters
+              .scale(240)
+              .translate([width / 2, height / 2])
+              .precision(.1);
+
+            path = d3.geo.path()  // create path generator function
+                .projection(projection);  // add our define projection to it
+
+            svg = d3.select("#map").append("svg")   // append a svg to our html div to hold our map
+                .attr("width", width)
+                .attr("height", height);
+
+            svg.append("defs").append("path")   // prepare some svg for outer container of svg elements
+                .datum({ type: "Sphere" })
+                .attr("id", "sphere")
+                .attr("d", path);
+
+            svg.append("use")   // use that svg to style with css
+                .attr("class", "stroke")
+                .attr("xlink:href", "#sphere");
+
+            div = d3.select("body").append("div")
+              .attr("class", "tooltip")
+              .style("opacity", 0);
+
+            load();  
+        }
+
+        function load() {
+
+            queue()  
+              .defer(d3.json, "world-topo.json")  // our world geometries
+              .defer(d3.csv, "DangleData.csv")  // data unique to project
+              .await(meshData);   // 
+
+        }
+
+        /// Mesh data from our geoJSON file and our custom data (from csv)
+        function meshData(error, world, countryData) {
+
+            // Get country geometries
+            var countries = world.objects.countries.geometries;
+
+            // Cycle through countries in both the geoJSON and custom CSV, looking for a match on ID
+            for (var i in countries) {    
+                for (var j in countryData) {  // for each row in the CSV
+                    if (countries[i].properties.id == countryData[j].id) {   // if they match
+                        for (var k in countryData[j]) {   // for each column in the a row within the CSV
+                            if (k != 'id') {
+
+                                // add column headings
+                                if (attributeArray.indexOf(k) == -1) {
+                                    attributeArray.push(k);  
+                                }
+                                countries[i].properties[k] = Number(countryData[j][k])  
+                            }
+                        }
+
+                        // stop, we've matched
+                        break;  
+                    }
+                }
+            }
+            d3.select('#clock').html('Draft Kings');  
+            drawMap(world);  
+        }
+
+        function drawMap(world) {
+
+            svg.selectAll(".country")
+              .data(topojson.feature(world, world.objects.countries).features)
+              .enter().append("path")
+              .attr("class", "country")
+              .attr("id", function (d) { return "code_" + d.properties.id; }, true)
+              .attr("d", path)
+                .on("mouseover", function (d) {
+
+                    // on hover, temporarily color the country with max intensity
+                    d3.select(this).transition().duration(300).attr('fill-opacity', function (d) {
+                        var dataRange = getDataRange();
+                        return getColor(dataRange[1], dataRange);  
+                    });
+
+
+                    div.transition().duration(300)
+                    .style("opacity", 1)
+                    div.text(d.properties.id + " : $/point " + Math.round(d.properties[attributeArray[currentAttribute]]))
+                    .style("left", (d3.event.pageX) + "px")
+                    .style("top", (d3.event.pageY - 30) + "px");
+                })
+              .on("mouseout", function () {
+                  d3.select(this)
+                  .transition().duration(300).attr('fill-opacity', function (d) {
+
+                      // recolor with current intensity
+                      var dataRange = getDataRange();
+                      return getColor(d.properties[attributeArray[currentAttribute]], dataRange);  // the end color value
+                  });
+                  div.transition().duration(300)
+                  .style("opacity", 0);
+              });
+
+            // get data range and color countries appropriately
+            var dataRange = getDataRange(); 
+            d3.selectAll('.country')  
+            .attr('fill-opacity', function (d) {
+                return getColor(d.properties[attributeArray[currentAttribute]], dataRange);  
+            });
+        }
+
+        function updateMap() {
+
+            var dataRange = getDataRange(); // get the min/max values from the current year's range of data values
+            d3.selectAll('.country').transition()  //select all the countries and prepare for a transition to new values
+              .duration(750)  // give it a smooth time period for the transition
+              .attr('fill-opacity', function (d) {
+                  return getColor(d.properties[attributeArray[currentAttribute]], dataRange);  // the end color value
+              })
+
+        }
+
+        // Get a color based on input value.
+        // linear scale between min and max values in the 
+        // dataset
+        // If a country is not present in our custom dataset,
+        // leave the fill colorless
+        function getColor(valueIn, valuesIn) {
+
+            var color = d3.scale.linear() 
+              .domain([valuesIn[0], valuesIn[1]])  
+              .range([.3, 1]);   
+
+            if (typeof valueIn === 'undefined')
+            {
+                return color(0);
+            }
+            else
+            {
+                return color(valueIn);  // return that number to the caller
+            }
+
+        }
+
+        function getDataRange() {
+            // determine min and max value for the input data
+            var min = Infinity, max = -Infinity;
+            d3.selectAll('.country')
+              .each(function (d, i) {
+                  var curr = d.properties[attributeArray[currentAttribute]];
+
+                  if (curr <= min && curr != 'undefined') {
+                      min = curr;
+                  }
+                  if (curr >= max && curr != 'undefined') {
+                      max = curr;
+                  }
+              });
+            return [min, max]; 
+        }
+
+        function animateMap() {
+            var intervalTime = 2000;
+            var timer;  // create timer object
+            d3.select('#play')
+              .on('click', function () {  // play/stop is clicked
+                  if (isPlaying == false) {
+                      timer = setInterval(function () {   
+
+                          if (currentAttribute < attributeArray.length - 1) {
+                              currentAttribute += 1;  
+                          } else {
+                              currentAttribute = 0;  
+                          }
+
+                          // updateMap
+                          updateMap();
+                          if (currentAttribute==0)
+                          {
+                              d3.select('#clock').html("Draft Kings");
+                          }
+                          else
+                          {
+                              d3.select('#clock').html("FanDuel");
+                          }
+                          
+                      }, intervalTime);
+
+                      d3.select(this).html('Stop Cycle');  
+                      isPlaying = true;   
+                  } else {    
+                      clearInterval(timer);   
+                      d3.select(this).html('Play Cycle');   
+                      isPlaying = false;   
+                  }
+              });
+        }
+
+        // starts here
+        window.onload = init();  
+
+    </script>
+</body>
+</html>

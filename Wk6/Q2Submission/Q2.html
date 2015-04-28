@@ -1,0 +1,86 @@
+﻿<!DOCTYPE html>
+<html>
+    <head>
+        <title>Hw6 Q2 - Justin Hink</title>
+
+        <link href="http://netdna.bootstrapcdn.com/twitter-bootstrap/2.3.2/css/bootstrap-combined.min.css" rel="stylesheet">
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
+        <script type="text/javascript" src="//www.google.com/jsapi"></script>
+        <script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.0/js/bootstrap.min.js"></script>
+ 
+
+        <script src="jquery.csv-0.71.js"></script> 
+
+        <script type="text/javascript">google.load('visualization', '1', {'packages':['corechart']});</script>
+        <script type="text/javascript" src="https://www.google.com/jsapi?autoload={'modules':[{'name':'visualization','version':'1.1','packages':['bar']}]}"></script>
+
+
+      <script type="text/javascript">
+
+      function drawChart(){
+        // get data from our csv
+          $.get('DangleDataQ2.csv', function (csvData) {
+            var arrayData = $.csv.toArrays(csvData, {
+            onParseValue: $.csv.hooks.castToScalar
+            });
+    
+            var data = new google.visualization.DataTable();
+                          data.addColumn({ name: 'Team', type: 'string' });
+                          data.addColumn('number', 'FDValue');
+                          data.addColumn('number', 'DKValue');
+
+            var teamArray = [];
+            for (i = 1; i < arrayData.length; i++){
+
+                teamArray.push([arrayData[i][0], arrayData[i][1], arrayData[i][2]]);
+            };
+
+            data.addRows(teamArray);
+
+            var barOptions = {
+                chart: {
+                    title: 'Investigating Bias',
+                },
+                bars: 'horizontal' // Required for Material Bar Charts.
+            };
+
+
+            var chart = new google.charts.Bar(document.getElementById('bChart'));
+            chart.draw(data, barOptions);
+
+        })
+
+      };
+
+      drawChart();
+      </script>
+
+    </head>
+
+    <body>
+      <h1>DFS Value per Team</h1>
+    
+
+        <!--<div class="row-fluid" style="float:left;">
+            <div class="span6" style="float:left;">
+                
+            </div>
+            <div style="left:800px">
+
+            </div>
+        </div>-->
+
+        <div class="container">
+            <div class="row">
+                <div class="col-xs-6">
+                    <div id='bChart' style='height:800px;'></div>
+                </div>
+                <div class="col-xs-6">
+                    <p>Again, this is a simple attempt to see if there is any bias towards a particular NHL team.  Theoretically, each team should have very similar values here.</p>
+                    <p>By eyeballing the values here, it looks like the teams that are priced near the expensive end (MTL, NYR etc) are those that did well in the real NHL standings.  Investigating this correlation may be something extra I look at for the project.</p>
+                </div>
+            </div>
+        </div>
+
+    </body>
+</html>
